@@ -234,5 +234,5 @@ This project is open source and available for educational and non-commercial use
 ---
 
 **Course**: CSE461  
-**Author**: [Your Name]  
+**Author**: Aritra Chakraborty  
 **Date**: September 2025
