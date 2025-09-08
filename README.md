@@ -158,6 +158,201 @@ struct HSV {
    - Output values to Serial Monitor
    - Wait 500ms before next reading
 
+## Complete Code Explanation
+
+### 1. Header and Pin Definitions
+```cpp
+// ---------- TCS3200 Color Sensor Pins ----------
+#define S0 4
+#define S1 5
+#define S2 6
+#define S3 7
+#define sensorOut 8
+```
+- **S0, S1**: Control the output frequency scaling (2%, 20%, or 100%)
+- **S2, S3**: Select which photodiode type to read (Red, Green, Blue, or Clear)
+- **sensorOut**: The pin that receives the frequency output from the sensor
+
+### 2. Global Variables and Constants
+```cpp
+// ---------- Variables ----------
+int redPW, greenPW, bluePW;
+
+// ---------- Max Pulse Width for normalization ----------
+const int MAX_PW = 2000;
+```
+- **redPW, greenPW, bluePW**: Store the pulse width readings for each color
+- **MAX_PW**: Maximum expected pulse width value, used for normalization (adjustable based on your sensor)
+
+### 3. HSV Data Structure
+```cpp
+// ---------- HSV Struct ----------
+struct HSV {
+  float h; // 0-360
+  float s; // 0-1
+  float v; // 0-1
+};
+```
+Defines a structure to store HSV (Hue, Saturation, Value) color values:
+- **h (Hue)**: Color type ranging from 0-360 degrees
+- **s (Saturation)**: Color purity ranging from 0 (gray) to 1 (pure color)
+- **v (Value)**: Brightness ranging from 0 (black) to 1 (white)
+
+### 4. Setup Function
+```cpp
+void setup() {
+  // Set S0 - S3 as outputs
+  pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+
+  // Set sensor output as input
+  pinMode(sensorOut, INPUT);
+
+  // Set frequency scaling to 20%
+  digitalWrite(S0, HIGH);
+  digitalWrite(S1, LOW);
+
+  // Start Serial Monitor
+  Serial.begin(9600);
+  Serial.println("TCS3200 Calibration Started...");
+}
+```
+**Initialization process:**
+- **Pin Configuration**: Sets control pins (S0-S3) as outputs and sensor output as input
+- **Frequency Scaling**: Sets to 20% by making S0=HIGH and S1=LOW
+  - This provides a good balance between sensitivity and response time
+- **Serial Communication**: Initializes at 9600 baud for data output
+
+### 5. Main Loop Function
+```cpp
+void loop() {
+  // Read pulse widths
+  redPW = getRedPW();
+  delay(50);
+  greenPW = getGreenPW();
+  delay(50);
+  bluePW = getBluePW();
+  delay(50);
+
+  // Convert to normalized 0-255 RGB values
+  float r_norm = normalizePW(redPW);
+  float g_norm = normalizePW(greenPW);
+  float b_norm = normalizePW(bluePW);
+
+  // Convert to HSV
+  HSV color = rgb2hsv(r_norm, g_norm, b_norm);
+
+  // Print RGB and HSV values
+  Serial.print("R: "); Serial.print(r_norm);
+  Serial.print(" G: "); Serial.print(g_norm);
+  Serial.print(" B: "); Serial.print(b_norm);
+  Serial.print(" | H: "); Serial.print(color.h);
+  Serial.print(" S: "); Serial.print(color.s, 2);
+  Serial.print(" V: "); Serial.println(color.v, 2);
+
+  delay(500);
+}
+```
+**Main execution cycle:**
+1. **Sequential Color Reading**: Reads each color with 50ms delays to allow sensor stabilization
+2. **Normalization**: Converts raw pulse widths to standardized 0-255 RGB values
+3. **Color Space Conversion**: Transforms RGB to HSV for better color analysis
+4. **Data Output**: Displays both RGB and HSV values via Serial Monitor
+5. **Cycle Delay**: 500ms pause before next reading cycle
+
+### 6. Pulse Width Normalization Function
+```cpp
+float normalizePW(int pw) {
+  float val = (MAX_PW - pw) * 255.0 / MAX_PW;
+  if (val < 0) val = 0;
+  if (val > 255) val = 255;
+  return val;
+}
+```
+**Normalization logic:**
+- **Inversion**: Higher pulse width = lower light intensity, so we subtract from MAX_PW
+- **Scaling**: Maps the result to 0-255 range (standard RGB values)
+- **Clamping**: Ensures values stay within valid 0-255 bounds
+- **Formula**: `normalized_value = (MAX_PW - pulse_width) * 255 / MAX_PW`
+
+### 7. RGB to HSV Conversion Function
+```cpp
+HSV rgb2hsv(float r, float g, float b) {
+  float rr = r / 255.0;
+  float gg = g / 255.0;
+  float bb = b / 255.0;
+  
+  float maxc = max(rr, max(gg, bb));
+  float minc = min(rr, min(gg, bb));
+  float delta = maxc - minc;
+
+  HSV hsv;
+
+  // Hue calculation
+  if (delta == 0) hsv.h = 0;
+  else if (maxc == rr) hsv.h = 60 * fmod(((gg - bb) / delta), 6);
+  else if (maxc == gg) hsv.h = 60 * (((bb - rr) / delta) + 2);
+  else hsv.h = 60 * (((rr - gg) / delta) + 4);
+  if (hsv.h < 0) hsv.h += 360;
+
+  // Saturation calculation
+  hsv.s = (maxc == 0) ? 0 : delta / maxc;
+
+  // Value calculation
+  hsv.v = maxc;
+
+  return hsv;
+}
+```
+**HSV Conversion Algorithm:**
+1. **Normalization**: Converts RGB values to 0-1 range
+2. **Min/Max/Delta**: Finds the minimum, maximum, and difference of RGB values
+3. **Hue Calculation**: 
+   - If no color difference (delta=0): Hue = 0
+   - Based on which color is dominant, calculates hue in degrees (0-360)
+   - Uses different formulas for red, green, or blue dominance
+4. **Saturation**: Measures color purity (delta/max)
+5. **Value**: Represents brightness (maximum of RGB values)
+
+### 8. Color Reading Functions
+```cpp
+int getRedPW() {
+  digitalWrite(S2, LOW);
+  digitalWrite(S3, LOW);
+  return pulseIn(sensorOut, LOW);
+}
+
+int getGreenPW() {
+  digitalWrite(S2, HIGH);
+  digitalWrite(S3, HIGH);
+  return pulseIn(sensorOut, LOW);
+}
+
+int getBluePW() {
+  digitalWrite(S2, LOW);
+  digitalWrite(S3, HIGH);
+  return pulseIn(sensorOut, LOW);
+}
+```
+**Filter Selection Logic:**
+- **Red Filter**: S2=LOW, S3=LOW - Activates red-filtered photodiodes
+- **Green Filter**: S2=HIGH, S3=HIGH - Activates green-filtered photodiodes  
+- **Blue Filter**: S2=LOW, S3=HIGH - Activates blue-filtered photodiodes
+- **pulseIn()**: Measures the duration of LOW pulse from sensor output
+  - Longer pulse = lower frequency = less light intensity
+  - Shorter pulse = higher frequency = more light intensity
+
+### Key Programming Concepts Used
+
+1. **Modular Design**: Separate functions for each color and conversion
+2. **Data Structures**: Custom HSV struct for organized data storage
+3. **Mathematical Algorithms**: RGB-to-HSV conversion using standard formulas
+4. **Hardware Interfacing**: Digital pin control and pulse width measurement
+5. **Serial Communication**: Real-time data monitoring and debugging
+6. **Calibration System**: Adjustable parameters for different environments
+
 ## Calibration
 
 The sensor may need calibration for your specific environment:
